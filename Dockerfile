@@ -6,19 +6,18 @@ WORKDIR /src
 COPY ["LOGIN/LOGIN.csproj", "LOGIN/"]
 RUN dotnet restore "LOGIN/LOGIN.csproj"
 
-# Copiar el resto de los archivos del proyecto y publicar
-COPY . ./
+# Copiar todo y construir
+COPY . .
 RUN dotnet publish "LOGIN/LOGIN.csproj" -c Release -o /app/publish
 
-# Etapa de ejecución
+# Etapa final
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 
-# Copiar los archivos publicados de la etapa de construcción
+# Configuración de health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:4000/health || exit 1
+
 COPY --from=build /app/publish .
-
-# Exponer el puerto en el que la aplicación escucha
 EXPOSE 4000
-
-# Comando para ejecutar la aplicación
 ENTRYPOINT ["dotnet", "LOGIN.dll"]
