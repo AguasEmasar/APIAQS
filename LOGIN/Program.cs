@@ -1,4 +1,4 @@
-using dotenv.net;
+using dotenv.net; // Cargar dotenv antes de todo
 using LOGIN;
 using LOGIN.Database;
 using LOGIN.Entities;
@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
+DotEnv.Load(options: new DotEnvOptions(probeForEnv: true)); // 👈 Cargar variables de entorno desde .env
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuración básica
+// Configuración de Serilog
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
@@ -62,7 +64,6 @@ try
     app.UseAuthorization();
     app.MapControllers();
 
-    DotEnv.Load(options: new DotEnvOptions(probeForEnv: true));
     app.UseSerilogRequestLogging();
 
     await InitializeDatabaseAsync(app);
@@ -91,15 +92,15 @@ async Task InitializeDatabaseAsync(IHost app)
         {
             logger.LogInformation("Connecting to database...");
             await context.Database.MigrateAsync();
-            
+
             var userManager = services.GetRequiredService<UserManager<UserEntity>>();
             var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
             await ApplicationDbSeeder.InitializeAsync(
-                userManager, 
-                roleManager, 
-                context, 
+                userManager,
+                roleManager,
+                context,
                 services.GetRequiredService<ILoggerFactory>());
-            
+
             break;
         }
         catch (Exception ex)
