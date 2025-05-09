@@ -1,4 +1,4 @@
-﻿using LOGIN.Services.Interfaces;
+using LOGIN.Services.Interfaces;
 using LOGIN.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -8,7 +8,7 @@ using System.Text;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using LOGIN.Services;
 using LOGIN.Dtos;
-using LOGIN.Dtos.NotificationDtos;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace LOGIN
 {
@@ -26,50 +26,39 @@ namespace LOGIN
         public void ConfigureServices(IServiceCollection services)
         {
             var jwtSettings = Configuration.GetSection("JWT");
-            var secretKey = jwtSettings["Secret"];
+            var secretKey = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT secret key is missing from configuration.");
 
-            if (string.IsNullOrWhiteSpace(secretKey))
-            {
-                throw new InvalidOperationException("JWT secret key is missing from configuration.");
-            }
+            var connString = Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string is missing");
 
-            var connString = Configuration.GetConnectionString("DefaultConnection");
-
+            // Configuración de DbContext con reintentos
             services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseMySql(connString, ServerVersion.AutoDetect(connString),
-                    mySqlOptions => mySqlOptions.SchemaBehavior(MySqlSchemaBehavior.Ignore)));
+                options.UseMySql(connString, ServerVersion.AutoDetect(connString), 
+                    mySqlOptions => {
+                        mySqlOptions.SchemaBehavior(MySqlSchemaBehavior.Ignore);
+                        mySqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(30),
+                            errorNumbersToAdd: null);
+                    }));
 
-            // Add custom services
+            // Health Checks
+            services.AddHealthChecks()
+                .AddMySql(connString, name: "mysql")
+                .AddDbContextCheck<ApplicationDbContext>();
+
+            // Registro de servicios
             services.AddTransient<IUserService, UserService>();
             services.AddTransient<IEmailService, EmailService>();
             services.AddTransient<IComunicateServices, ComunicateServices>();
             services.Configure<ApiSettings>(Configuration.GetSection("ApiSettings"));
             services.AddTransient<IAPiSubscriberServices, APiSubscriberServices>();
             services.AddHttpClient<IAPiSubscriberServices, APiSubscriberServices>();
-            services.AddTransient<IReportService, ReportService>();
-            services.AddTransient<IBlocksService, BlocksService>();
-            services.AddScoped<IDistrictsPointsService, DistrictsPointsService>();
-            services.AddTransient<ILinesService, LinesService>();
-            services.AddTransient<INeighborhoodsColoniesService, NeighborhoodsColoniesService>();
-            services.AddTransient<IRegistrationWaterService, RegistrationWaterService>();
-            services.AddTransient<IRegistrationWaterNeighborhoodsColoniesService, RegistrationWaterNeighborhoodsColoniesService>();
-            services.AddTransient<IStateService, StateService>();
-            //Services notification
-            // Agrega después de builder.Services.AddDbContext
-            services.Configure<DeviceNotificationRequest>(Configuration.GetSection("Firebase"));
-            services.AddScoped<INotificationService, NotificationService>();
+            // ... (otros servicios)
 
-            // Asegúrate que el archivo firebase-config.json esté en el directorio correcto
-            //var firebaseConfigPath = Path.Combine(Directory.GetCurrentDirectory(), "firebase-config.json");
-            //if (!File.Exists(firebaseConfigPath))
-            //{
-            //    throw new FileNotFoundException("Archivo de configuración de Firebase no encontrado");
-            //}
-
-            // Add AutoMapper service
+            // AutoMapper
             services.AddAutoMapper(typeof(Startup));
 
-            // Add Identity
+            // Identity con configuración personalizada
             services.AddIdentity<UserEntity, IdentityRole>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;
@@ -101,7 +90,7 @@ namespace LOGIN
                 };
             });
 
-            // Configure CORS
+            // CORS
             services.AddCors(options =>
             {
                 options.AddPolicy(_corsPolicy, builder =>
@@ -113,36 +102,30 @@ namespace LOGIN
                 });
             });
 
-            // Add Swagger
+            // Swagger
             services.AddEndpointsApiExplorer();
             services.AddSwaggerGen();
 
-            // Add Controllers
+            // Controllers
             services.AddControllers();
         }
 
-
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-                          
-            app.UseSwagger();
-            app.UseSwaggerUI();
-            //{
-            //    c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
-            //    c.RoutePrefix = string.Empty;
-            //});
-            //{
-            //    app.UseExceptionHandler("/error");
-            //    app.UseHsts();
-            //}
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+            else
+            {
+                app.UseExceptionHandler("/error");
+                app.UseHsts();
+            }
 
             app.UseHttpsRedirection();
             app.UseRouting();
 
-            // Use CORS
             app.UseCors(_corsPolicy);
-
-            // Use Authentication
             app.UseAuthentication();
             app.UseAuthorization();
 
