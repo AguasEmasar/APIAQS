@@ -1,23 +1,19 @@
-using LOGIN.Services.Interfaces;
-using LOGIN.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
-using LOGIN.Services;
-using LOGIN.Dtos;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
+using LOGIN.Database; // tu DbContext
+using LOGIN.Services; // tus servicios
 
 namespace LOGIN
 {
     public class Startup
     {
-        private readonly string _corsPolicy = "CorsPolicy";
-
         public IConfiguration Configuration { get; }
-
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -25,96 +21,92 @@ namespace LOGIN
 
         public void ConfigureServices(IServiceCollection services)
         {
-            var jwtSettings = Configuration.GetSection("JWT");
-            var secretKey = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT secret key is missing from configuration.");
+            // MySQL + ServerVersion
+            var connectionString = Configuration.GetConnectionString("DefaultConnection");
+            var serverVersion = new MySqlServerVersion(new Version(8, 0, 36)); // cambia según tu versión real
 
-            var connString = Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string is missing");
-
-            // Configuración de DbContext
             services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseMySql(connString, ServerVersion.AutoDetect(connString),
-                    mySqlOptions => mySqlOptions.SchemaBehavior(MySqlSchemaBehavior.Ignore)));
+                options.UseMySql(connectionString, serverVersion));
 
-            // Health Checks
-            services.AddHealthChecks()
-                .AddMySql(connString)
-                .AddDbContextCheck<ApplicationDbContext>();
+            // JWT Configuración
+            var jwtSettings = Configuration.GetSection("Jwt");
+            var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
 
-            // Registro de servicios
-            services.AddTransient<IUserService, UserService>();
-            // ... (otros servicios)
-
-            // AutoMapper
-            services.AddAutoMapper(typeof(Startup));
-
-            // Identity
-            services.AddIdentity<UserEntity, IdentityRole>(options =>
+            services.AddAuthentication(x =>
             {
-                options.SignIn.RequireConfirmedAccount = false;
-                options.Password.RequireDigit = true;
-                options.Password.RequiredLength = 8;
-                options.Password.RequireNonAlphanumeric = true;
-                options.Password.RequireUppercase = true;
+                x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
             })
-            .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddDefaultTokenProviders();
-
-            // JWT Authentication
-            services.AddAuthentication(options =>
+            .AddJwtBearer(x =>
             {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = new TokenValidationParameters
+                x.RequireHttpsMetadata = false;
+                x.SaveToken = true;
+                x.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
+                    ValidIssuer = jwtSettings["Issuer"],
                     ValidateAudience = true,
+                    ValidAudience = jwtSettings["Audience"],
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    ValidIssuer = jwtSettings["ValidIssuer"],
-                    ValidAudience = jwtSettings["ValidAudience"],
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+                    IssuerSigningKey = new SymmetricSecurityKey(key)
                 };
+            });
+
+            services.AddControllers();
+
+            // Swagger
+            services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "LOGIN API", Version = "v1" });
+                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    In = ParameterLocation.Header,
+                    Description = "Ingrese el token JWT con 'Bearer '",
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.ApiKey,
+                    Scheme = "Bearer"
+                });
+                c.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                        },
+                        new string[] {}
+                    }
+                });
             });
 
             // CORS
             services.AddCors(options =>
             {
-                options.AddPolicy(_corsPolicy, builder =>
-                {
-                    builder.AllowAnyOrigin()
-                           .AllowAnyHeader()
-                           .AllowAnyMethod()
-                           .WithExposedHeaders("Content-Disposition");
-                });
+                options.AddPolicy("AllowAll",
+                    builder => builder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
             });
 
-            // Swagger
-            services.AddEndpointsApiExplorer();
-            services.AddSwaggerGen();
-
-            // Controllers
-            services.AddControllers();
+            // Servicios personalizados
+            services.AddScoped<ComunicateServices>();
+            services.AddScoped<RegistrationWaterService>();
+            services.AddScoped<ReportService>();
+            services.AddScoped<NeighborhoodsColoniesService>();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
-            {
                 app.UseDeveloperExceptionPage();
-            }
-            else
-            {
-                app.UseExceptionHandler("/error");
-                app.UseHsts();
-            }
+
+            app.UseSwagger();
+            app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "LOGIN API v1"));
 
             app.UseHttpsRedirection();
+
             app.UseRouting();
 
-            app.UseCors(_corsPolicy);
+            app.UseCors("AllowAll");
+
             app.UseAuthentication();
             app.UseAuthorization();
 
