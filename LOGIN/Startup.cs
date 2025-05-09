@@ -30,35 +30,24 @@ namespace LOGIN
 
             var connString = Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string is missing");
 
-            // Configuración de DbContext con reintentos
+            // Configuración de DbContext
             services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseMySql(connString, ServerVersion.AutoDetect(connString), 
-                    mySqlOptions => {
-                        mySqlOptions.SchemaBehavior(MySqlSchemaBehavior.Ignore);
-                        mySqlOptions.EnableRetryOnFailure(
-                            maxRetryCount: 5,
-                            maxRetryDelay: TimeSpan.FromSeconds(30),
-                            errorNumbersToAdd: null);
-                    }));
+                options.UseMySql(connString, ServerVersion.AutoDetect(connString),
+                    mySqlOptions => mySqlOptions.SchemaBehavior(MySqlSchemaBehavior.Ignore)));
 
             // Health Checks
-           services.AddHealthChecks()
-               .AddMySql(Configuration.GetConnectionString("DefaultConnection"))
-               .AddDbContextCheck<ApplicationDbContext>();
+            services.AddHealthChecks()
+                .AddMySql(connString)
+                .AddDbContextCheck<ApplicationDbContext>();
 
             // Registro de servicios
             services.AddTransient<IUserService, UserService>();
-            services.AddTransient<IEmailService, EmailService>();
-            services.AddTransient<IComunicateServices, ComunicateServices>();
-            services.Configure<ApiSettings>(Configuration.GetSection("ApiSettings"));
-            services.AddTransient<IAPiSubscriberServices, APiSubscriberServices>();
-            services.AddHttpClient<IAPiSubscriberServices, APiSubscriberServices>();
             // ... (otros servicios)
 
             // AutoMapper
             services.AddAutoMapper(typeof(Startup));
 
-            // Identity con configuración personalizada
+            // Identity
             services.AddIdentity<UserEntity, IdentityRole>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;
