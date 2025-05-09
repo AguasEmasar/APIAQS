@@ -42,9 +42,9 @@ namespace LOGIN
                     }));
 
             // Health Checks
-            services.AddHealthChecks()
-                .AddMySql(connString);
-                .AddDbContextCheck<ApplicationDbContext>();
+           services.AddHealthChecks()
+               .AddMySql(Configuration.GetConnectionString("DefaultConnection"))
+               .AddDbContextCheck<ApplicationDbContext>();
 
             // Registro de servicios
             services.AddTransient<IUserService, UserService>();
