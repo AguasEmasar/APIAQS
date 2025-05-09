@@ -43,7 +43,7 @@ namespace LOGIN
 
             // Health Checks
             services.AddHealthChecks()
-                .AddMySql(connString, name: "mysql")
+                .AddMySql(connString);
                 .AddDbContextCheck<ApplicationDbContext>();
 
             // Registro de servicios
