@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore
 using dotenv.net;
 using LOGIN;
 using LOGIN.Database;
@@ -105,12 +106,12 @@ async Task InitializeDatabaseAsync(IHost app)
             }
             
             logger.LogInformation("Conexión a la base de datos exitosa");
-            
+
             await context.Database.MigrateAsync();
             
             var userManager = services.GetRequiredService<UserManager<UserEntity>>();
             var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-            await ApplicationDbSeeder.InitializeAsync(userManager, roleManager, context, logger);
+            await ApplicationDbSeeder.InitializeAsync(userManager, roleManager, context, services.GetRequiredService<ILoggerFactory>());
             
             break;
         }
