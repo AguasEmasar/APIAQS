@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configurar Serilog
+// Configuración básica
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
@@ -51,7 +51,6 @@ try
         }
     });
 
-    // Swagger solo en desarrollo
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
@@ -63,23 +62,15 @@ try
     app.UseAuthorization();
     app.MapControllers();
 
-    // Cargar variables de entorno
     DotEnv.Load(options: new DotEnvOptions(probeForEnv: true));
+    app.UseSerilogRequestLogging();
 
-    // Logging de requests
-    app.UseSerilogRequestLogging(options =>
-    {
-        options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
-    });
-
-    // Inicialización de BD con reintentos
     await InitializeDatabaseAsync(app);
-
     app.Run();
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "La aplicación se detuvo inesperadamente");
+    Log.Fatal(ex, "Application terminated unexpectedly");
 }
 finally
 {
@@ -98,14 +89,7 @@ async Task InitializeDatabaseAsync(IHost app)
     {
         try
         {
-            logger.LogInformation("Intentando conectar a la base de datos...");
-            
-            if (!await context.Database.CanConnectAsync())
-            {
-                throw new Exception("No se pudo conectar a la base de datos");
-            }
-            
-            logger.LogInformation("Conexión exitosa. Aplicando migraciones...");
+            logger.LogInformation("Connecting to database...");
             await context.Database.MigrateAsync();
             
             var userManager = services.GetRequiredService<UserManager<UserEntity>>();
@@ -121,10 +105,8 @@ async Task InitializeDatabaseAsync(IHost app)
         catch (Exception ex)
         {
             retries--;
-            logger.LogError(ex, "Error al inicializar BD. Reintentos restantes: {Retries}", retries);
-            
+            logger.LogError(ex, "Database initialization failed. Retries left: {Retries}", retries);
             if (retries == 0) throw;
-                
             await Task.Delay(5000);
         }
     }
