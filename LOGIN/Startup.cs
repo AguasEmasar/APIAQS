@@ -14,6 +14,7 @@ namespace LOGIN
     public class Startup
     {
         public IConfiguration Configuration { get; }
+        
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -91,6 +92,9 @@ namespace LOGIN
             services.AddScoped<RegistrationWaterService>();
             services.AddScoped<ReportService>();
             services.AddScoped<NeighborhoodsColoniesService>();
+
+            // Agregar HealthChecks
+            services.AddHealthChecks();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -110,9 +114,11 @@ namespace LOGIN
             app.UseAuthentication();
             app.UseAuthorization();
 
+            // Agregar el endpoint de HealthCheck
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
+                endpoints.MapHealthChecks("/health");
             });
         }
     }
