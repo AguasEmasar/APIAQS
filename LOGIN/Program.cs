@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore
 using dotenv.net;
 using LOGIN;
 using LOGIN.Database;
@@ -7,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,7 +16,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 builder.Host.UseSerilog();
-builder.WebHost.UseUrls("http://*:4000"); // Configuración única del puerto
+builder.WebHost.UseUrls("http://*:4000");
 
 try
 {
@@ -25,11 +25,11 @@ try
 
     var app = builder.Build();
 
-    // Configuración de middlewares en el orden correcto
+    // Configuración de middlewares
     app.UseRouting();
     startup.Configure(app, app.Environment);
 
-    // Health Check con configuración detallada
+    // Health Check
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
         ResponseWriter = async (context, report) =>
@@ -66,13 +66,13 @@ try
     // Cargar variables de entorno
     DotEnv.Load(options: new DotEnvOptions(probeForEnv: true));
 
-    // Middleware para logging de requests
+    // Logging de requests
     app.UseSerilogRequestLogging(options =>
     {
         options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
     });
 
-    // Inicialización de la base de datos con reintentos
+    // Inicialización de BD con reintentos
     await InitializeDatabaseAsync(app);
 
     app.Run();
@@ -105,26 +105,25 @@ async Task InitializeDatabaseAsync(IHost app)
                 throw new Exception("No se pudo conectar a la base de datos");
             }
             
-            logger.LogInformation("Conexión a la base de datos exitosa");
-
+            logger.LogInformation("Conexión exitosa. Aplicando migraciones...");
             await context.Database.MigrateAsync();
             
             var userManager = services.GetRequiredService<UserManager<UserEntity>>();
             var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-            await ApplicationDbSeeder.InitializeAsync(userManager, roleManager, context, services.GetRequiredService<ILoggerFactory>());
+            await ApplicationDbSeeder.InitializeAsync(
+                userManager, 
+                roleManager, 
+                context, 
+                services.GetRequiredService<ILoggerFactory>());
             
             break;
         }
         catch (Exception ex)
         {
             retries--;
-            logger.LogError(ex, "Error al conectar con la base de datos. Reintentos restantes: {Retries}", retries);
+            logger.LogError(ex, "Error al inicializar BD. Reintentos restantes: {Retries}", retries);
             
-            if (retries == 0)
-            {
-                logger.LogCritical("No se pudo conectar a la base de datos después de varios intentos");
-                throw;
-            }
+            if (retries == 0) throw;
                 
             await Task.Delay(5000);
         }
