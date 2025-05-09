@@ -12,7 +12,7 @@ Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
 
-builder.Host.UseSerilog(); // Ingracion Serilog con la aplicación
+builder.Host.UseSerilog(); // Ingracion Serilog con la aplicaciÃ³n
 builder.WebHost.UseUrls("http://0.0.0.0:4000");
 
 try
@@ -21,12 +21,14 @@ try
     startup.ConfigureServices(builder.Services);
 
     builder.WebHost.UseUrls("http://*:4000");
+    builder.Services.AddHealthChecks();
 
     var app = builder.Build();
     startup.Configure(app, app.Environment);
 
     await InitializeDatabaseAsync(app);
 
+    app.MapHealthChecks("/health");
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseHttpsRedirection();
@@ -47,7 +49,7 @@ try
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "La aplicación se detuvo inesperadamente");
+    Log.Fatal(ex, "La aplicaciÃ³n se detuvo inesperadamente");
 }
 finally
 {
