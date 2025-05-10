@@ -1,4 +1,4 @@
-using dotenv.net; // Cargar dotenv antes de todo
+using dotenv.net;
 using LOGIN;
 using LOGIN.Database;
 using LOGIN.Entities;
@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
-DotEnv.Load(options: new DotEnvOptions(probeForEnv: true)); // 👈 Cargar variables de entorno desde .env
+DotEnv.Load(options: new DotEnvOptions(probeForEnv: true));
 
 var builder = WebApplication.CreateBuilder(args);
 
